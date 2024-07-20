@@ -5,21 +5,20 @@
 //! [`shell-escape`]: https://crates.io/crates/shell-escape
 //! [`this PR`]: https://github.com/sfackler/shell-escape/pull/9
 
+#[cfg(unix)]
 mod unix {
 	use std::{borrow::Cow, ffi::{OsStr, OsString}, os::unix::ffi::{OsStrExt, OsStringExt}};
 
 	pub fn escape(s: &OsStr) -> Cow<'_, OsStr> {
-		let as_bytes = s.as_bytes();
-		let all_allowed = as_bytes.iter().copied().all(allowed);
-
-		if !as_bytes.is_empty() && all_allowed {
+		let bytes = s.as_bytes();
+		if !bytes.is_empty() && bytes.iter().copied().all(allowed) {
 			return Cow::Borrowed(s);
 		}
 
-		let mut escaped = Vec::with_capacity(as_bytes.len() + 2);
+		let mut escaped = Vec::with_capacity(bytes.len() + 2);
 		escaped.push(b'\'');
 
-		for &b in as_bytes {
+		for &b in bytes {
 			match b {
 				b'\'' | b'!' => {
 					escaped.reserve(4);
@@ -70,46 +69,45 @@ mod unix {
 	}
 }
 
+#[cfg(windows)]
 mod windows {
 	use std::{borrow::Cow, ffi::{OsStr, OsString}, iter::repeat, os::windows::ffi::{OsStrExt, OsStringExt}};
 
 	pub fn escape(s: &OsStr) -> Cow<'_, OsStr> {
-		let encoded = s.encode_wide();
-		let needs_escaping = encoded.clone().any(disallowed);
-
-		if s.is_empty() || !needs_escaping {
+		let wide = s.encode_wide();
+		if !s.is_empty() && !wide.clone().into_iter().any(disallowed) {
 			return Cow::Borrowed(s);
 		}
 
-		let mut escaped = Vec::with_capacity(s.len() + 2);
-		escaped.push(b'"' as u16);
+		let mut escaped: Vec<u16> = Vec::with_capacity(s.len() + 2);
+		escaped.push(b'"' as _);
 
-		let mut chars = encoded.into_iter().peekable();
+		let mut chars = wide.into_iter().peekable();
 		loop {
 			let mut slashes = 0;
-			while chars.next_if_eq(&(b'\\' as u16)).is_some() {
+			while chars.next_if_eq(&(b'\\' as _)).is_some() {
 				slashes += 1;
 			}
 			match chars.next() {
-				Some(c) if c == b'"' as u16 => {
+				Some(c) if c == b'"' as _ => {
 					escaped.reserve(slashes * 2 + 2);
-					escaped.extend(repeat(b'\\' as u16).take(slashes * 2 + 1));
-					escaped.push(b'"' as u16);
+					escaped.extend(repeat(b'\\' as _).take(slashes * 2 + 1));
+					escaped.push(b'"' as _);
 				}
 				Some(c) => {
 					escaped.reserve(slashes + 1);
-					escaped.extend(repeat(b'\\' as u16).take(slashes));
+					escaped.extend(repeat(b'\\' as _).take(slashes));
 					escaped.push(c);
 				}
 				None => {
 					escaped.reserve(slashes * 2);
-					escaped.extend(repeat(b'\\' as u16).take(slashes * 2));
+					escaped.extend(repeat(b'\\' as _).take(slashes * 2));
 					break;
 				}
 			}
 		}
 
-		escaped.push(b'"' as u16);
+		escaped.push(b'"' as _);
 		OsString::from_wide(&escaped).into()
 	}
 
@@ -123,6 +121,24 @@ mod windows {
 	#[cfg(test)]
 	#[test]
 	fn test_escape() {
+		fn from_str(input: &str, expected: &str) {
+			let binding = OsString::from(input);
+			let input_os_str = binding.as_os_str();
+			let binding = OsString::from(expected);
+			let expected_os_str = binding.as_os_str();
+			let observed_os_str = escape(input_os_str);
+			assert_eq!(observed_os_str, expected_os_str);
+		}
+
+		fn from_bytes(input: &[u16], expected: &[u16]) {
+			let binding = OsString::from_wide(input);
+			let input_os_str = binding.as_os_str();
+			let binding = OsString::from_wide(expected);
+			let expected_os_str = binding.as_os_str();
+			let observed_os_str = escape(input_os_str);
+			assert_eq!(observed_os_str, expected_os_str);
+		}
+
 		from_str("", r#""""#);
 		from_str(r#""""#, r#""\"\"""#);
 
