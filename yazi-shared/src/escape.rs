@@ -91,7 +91,7 @@ mod windows {
 			match chars.next() {
 				Some(c) if c == b'"' as _ => {
 					escaped.reserve(slashes * 2 + 2);
-					escaped.extend(repeat(b'\\' as _).take(slashes * 2 + 1));
+					escaped.extend(repeat(b'\\' as u16).take(slashes * 2 + 1));
 					escaped.push(b'"' as _);
 				}
 				Some(c) => {
