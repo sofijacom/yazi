@@ -96,12 +96,12 @@ mod windows {
 				}
 				Some(c) => {
 					escaped.reserve(slashes + 1);
-					escaped.extend(repeat(b'\\' as _).take(slashes));
+					escaped.extend(repeat(b'\\' as u16).take(slashes));
 					escaped.push(c);
 				}
 				None => {
 					escaped.reserve(slashes * 2);
-					escaped.extend(repeat(b'\\' as _).take(slashes * 2));
+					escaped.extend(repeat(b'\\' as u16).take(slashes * 2));
 					break;
 				}
 			}
